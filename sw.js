@@ -1,4 +1,4 @@
-const CACHE_NAME = 'score-offline-v28';
+const CACHE_NAME = 'score-offline-v30';
 const urlsToCache = [
   './',
   './index.html',
@@ -11,13 +11,6 @@ const urlsToCache = [
 
 self.addEventListener('install', event => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return Promise.allSettled(
-        urlsToCache.map(url => cache.add(url).catch(err => console.log('Chyba ukladania:', url)))
-      );
-    })
-  );
 });
 
 self.addEventListener('activate', event => {
@@ -29,16 +22,19 @@ self.addEventListener('activate', event => {
   );
 });
 
+// ZACHRANNÁ STRATÉGIA: Najprv sieť (aby si vždy videla novú verziu), potom cache (do lesa)
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(res => {
-        const resClone = res.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
-        return res;
-      }).catch(() => {
+    fetch(event.request).then(response => {
+      const resClone = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+      return response;
+    }).catch(() => {
+      // Sme offline - vraciame z pamäte
+      return caches.match(event.request).then(cached => {
+        if (cached) return cached;
         if (event.request.mode === 'navigate') return caches.match('./index.html');
       });
     })
