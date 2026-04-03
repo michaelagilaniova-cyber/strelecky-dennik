@@ -7,7 +7,7 @@
   
   <title>Score</title>
 
-  <!-- BEZPEČNÁ CESTA PRE GITHUB PAGES -->
+  <!-- BEZPEČNÁ CESTA PRE GITHUB PAGES (Chráni pred Error 404) -->
   <script>
     const svgIcon = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0891b2" /><circle cx="256" cy="256" r="180" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="120" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="60" fill="#ffffff" /><path d="M140 372 L256 256" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" /><path d="M110 402 L140 372 M120 360 L150 390 M100 380 L130 410" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" /></svg>`);
     
@@ -44,17 +44,14 @@
   <script src="https://unpkg.com/@babel/standalone@7.24.4/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  <!-- ATÓMOVÁ BOMBA NA PREČISTENIE STAREJ CACHE -->
+  <!-- BEZPEČNÁ REGISTRÁCIA MOTORČEKA (Bez mazania offline pamäte) -->
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
       window.addEventListener('load', () => {
-        // Nasilu odregistrujeme všetky staré motorčeky
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) { registration.unregister(); }
-        });
-        
-        // Zaregistrujeme nový motorček
-        navigator.serviceWorker.register('./sw.js?v=32', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
+        navigator.serviceWorker.register('./sw.js?v=33', { scope: basePath }).then(registration => {
+          // Ak sme online, pokúsi sa stiahnuť novšiu verziu na pozadí
+          registration.update();
+        }).catch((error) => console.log('SW chyba:', error));
       });
     }
   </script>
@@ -395,6 +392,8 @@
       const [exportDialog, setExportDialog] = useState(false);
       const [exportSettings, setExportSettings] = useState({ stats: true, targets: false, archerId: 'all' });
       const [isExporting, setIsExporting] = useState(false);
+      
+      // Definovanie chýbajúcich premenných pre zobrazenie
       const [showTargetBreakdown, setShowTargetBreakdown] = useState(false);
       const [showGraphs, setShowGraphs] = useState(false);
       
