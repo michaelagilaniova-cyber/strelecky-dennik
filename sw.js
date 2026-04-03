@@ -1,18 +1,18 @@
-const CACHE_NAME = 'score-offline-v24';
+const CACHE_NAME = 'score-offline-v28';
 const urlsToCache = [
-  '/',
-  '/index.html',
+  './',
+  './index.html',
   'https://cdn.tailwindcss.com/3.4.3',
   'https://unpkg.com/react@18.3.1/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js',
-  'https://unpkg.com/@babel/standalone@7.24.4/babel.min.js'
+  'https://unpkg.com/@babel/standalone@7.24.4/babel.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
 ];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      // Agresívne sťahovanie - ak jeden súbor zlyhá, nezruší sa inštalácia ostatných
       return Promise.allSettled(
         urlsToCache.map(url => cache.add(url).catch(err => console.log('Chyba ukladania:', url)))
       );
@@ -22,7 +22,6 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   self.clients.claim();
-  // Vyčistenie starého balastu z predchádzajúcich verzií
   event.waitUntil(
     caches.keys().then(keys => Promise.all(
       keys.map(k => k !== CACHE_NAME ? caches.delete(k) : null)
@@ -40,8 +39,7 @@ self.addEventListener('fetch', event => {
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
         return res;
       }).catch(() => {
-        // Ak zlyhá internet, presmeruje ťa vždy na domácu offline obrazovku
-        if (event.request.mode === 'navigate') return caches.match('/index.html');
+        if (event.request.mode === 'navigate') return caches.match('./index.html');
       });
     })
   );
