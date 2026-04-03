@@ -1,0 +1,1652 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0891b2">
+  
+  <title>Score</title>
+
+  <!-- Pevne zabudovaná ikona a nastavenia aplikácie priamo v kóde (nepotrebuješ icon.png) -->
+  <script>
+    const svgIcon = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0891b2" /><circle cx="256" cy="256" r="180" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="120" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="60" fill="#ffffff" /><path d="M140 372 L256 256" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" /><path d="M110 402 L140 372 M120 360 L150 390 M100 380 L130 410" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" /></svg>`);
+    const manifest = {
+      name: "Score (Strelecký denník)",
+      short_name: "Score",
+      display: "standalone",
+      start_url: "/",
+      background_color: "#ecfeff",
+      theme_color: "#0891b2",
+      icons: [{ src: svgIcon, sizes: "any", type: "image/svg+xml", purpose: "any maskable" }]
+    };
+    const manifestData = "data:application/manifest+json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest));
+    document.write('<link rel="manifest" href="' + manifestData + '">');
+    document.write('<link rel="apple-touch-icon" href="' + svgIcon + '">');
+  </script>
+  
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Score">
+  
+  <!-- Presné verzie knižníc pre stopercentný offline režim -->
+  <script src="https://cdn.tailwindcss.com/3.4.3"></script>
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.4/babel.min.js"></script>
+
+  <!-- Registrácia Service Workera pre offline fungovanie -->
+  <script>
+    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js?v=23').then(registration => {
+          registration.update();
+        }).catch((error) => console.log('SW chyba:', error));
+      });
+    }
+  </script>
+</head>
+<body class="bg-gray-50 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- IKONY ---
+    const Icon = ({ children, className }) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>;
+    const Target = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></Icon>;
+    const UserPlus = ({ className }) => <Icon className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></Icon>;
+    const Users = ({ className }) => <Icon className={className}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+    const ArrowRight = ({ className }) => <Icon className={className}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></Icon>;
+    const ChevronLeft = ({ className }) => <Icon className={className}><polyline points="15 18 9 12 15 6"/></Icon>;
+    const ChevronRight = ({ className }) => <Icon className={className}><polyline points="9 18 15 12 9 6"/></Icon>;
+    const ChevronDown = ({ className }) => <Icon className={className}><polyline points="6 9 12 15 18 9"/></Icon>;
+    const ChevronUp = ({ className }) => <Icon className={className}><polyline points="18 15 12 9 6 15"/></Icon>;
+    const Plus = ({ className }) => <Icon className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+    const RotateCcw = ({ className }) => <Icon className={className}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></Icon>;
+    const Check = ({ className }) => <Icon className={className}><polyline points="20 6 9 17 4 12"/></Icon>;
+    const BarChart2 = ({ className }) => <Icon className={className}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></Icon>;
+    const Edit3 = ({ className }) => <Icon className={className}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></Icon>;
+    const HistoryIcon = ({ className }) => <Icon className={className}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+    const Save = ({ className }) => <Icon className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></Icon>;
+    const Camera = ({ className }) => <Icon className={className}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Icon>;
+    const FileText = ({ className }) => <Icon className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></Icon>;
+    const ImageIcon = ({ className }) => <Icon className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>;
+    const Trash2 = ({ className }) => <Icon className={className}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></Icon>;
+    const Play = ({ className }) => <Icon className={className}><polygon points="5 3 19 12 5 21 5 3"/></Icon>;
+    const Star = ({ className }) => <Icon className={className}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Icon>;
+    const Download = ({ className }) => <Icon className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>;
+
+    // --- CONFIGURATION DATA ---
+    const DIVISIONS = ['BB', 'CB', 'CRB', 'CU', 'HU', 'OL', 'PBHB', 'TRLB', 'TRRB'];
+    const AGE_CATEGORIES = ['dieťa', 'kadet', 'senior', 'veterán'];
+    const SCORES_3D = [11, 10, 8, 5, 0];
+    const SCORES_TERC = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0];
+    const DIRECTIONS = ['Nad', 'Pod', 'Vľavo', 'Vpravo'];
+
+    // Custom hook for LocalStorage with immediate sync
+    const useLocalStorage = (key, initialValue) => {
+      const [storedValue, setStoredValue] = useState(() => {
+        try {
+          const item = window.localStorage.getItem(key);
+          return item ? JSON.parse(item) : initialValue;
+        } catch (error) {
+          return initialValue;
+        }
+      });
+
+      const setValue = (value) => {
+        try {
+          const valueToStore = value instanceof Function ? value(storedValue) : value;
+          setStoredValue(valueToStore);
+          window.localStorage.setItem(key, JSON.stringify(valueToStore));
+        } catch (error) {
+          console.error("Chyba ukladania:", error);
+        }
+      };
+      return [storedValue, setValue];
+    };
+
+    // --- FARBY PRE BODKY A TLAČIDLÁ ---
+    const getScoreColor = (score, is3D) => {
+      if (is3D) {
+        switch(score) {
+          case 11: return 'bg-amber-400 text-black border-2 border-amber-500';
+          case 10: return 'bg-cyan-300 text-black border-2 border-cyan-500';
+          case 8: return 'bg-pink-300 text-black border-2 border-pink-400';
+          case 5: return 'bg-gray-200 text-black border-2 border-gray-400';
+          case 0: return 'bg-white text-black border-2 border-gray-300';
+          default: return 'bg-gray-200 text-black';
+        }
+      } else {
+        if (score >= 9) return 'bg-yellow-400 text-black';
+        if (score >= 7) return 'bg-red-500 text-white';
+        if (score >= 5) return 'bg-cyan-500 text-white';
+        if (score >= 3) return 'bg-gray-800 text-white';
+        if (score >= 1) return 'bg-white text-black border-2 border-gray-300';
+        return 'bg-white text-gray-400 border-2 border-gray-200'; 
+      }
+    };
+
+    const getHitColorHex = (score, is3D) => {
+      if (is3D) {
+        if (score === 11) return '#fcd34d'; 
+        if (score === 10) return '#67e8f9'; 
+        if (score === 8) return '#f9a8d4'; 
+        if (score === 5) return '#e5e7eb'; 
+        return '#ffffff'; 
+      } else {
+        if (score >= 9) return '#facc15'; 
+        if (score >= 7) return '#ef4444'; 
+        if (score >= 5) return '#06b6d4'; 
+        if (score >= 3) return '#1f2937'; 
+        if (score >= 1) return '#ffffff'; 
+        return '#ffffff'; 
+      }
+    };
+
+    // --- MOCK HIT GENERATOR (Pre tlačidlá - matematické súradnice do vektorového nákresu) ---
+    const generateMockHit = (score, directions, is3D, seed) => {
+      const pRandom = () => {
+          let x = Math.sin(seed++) * 10000;
+          return x - Math.floor(x);
+      };
+
+      let angle = pRandom() * Math.PI * 2; 
+      if (directions && directions.length > 0) {
+          let xDir = 0, yDir = 0;
+          if (directions.includes('Nad')) yDir = -1;
+          if (directions.includes('Pod')) yDir = 1;
+          if (directions.includes('Vľavo')) xDir = -1;
+          if (directions.includes('Vpravo')) xDir = 1;
+          
+          if (xDir !== 0 || yDir !== 0) {
+              angle = Math.atan2(yDir, xDir);
+              angle += (pRandom() - 0.5) * 0.7; 
+          }
+      }
+
+      let d = 0;
+      if (is3D) {
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+          // Výpočet polomeru elipsy pre daný uhol
+          const getEllipseR = (rx, ry) => 1 / Math.sqrt(Math.pow(cosA/rx, 2) + Math.pow(sinA/ry, 2));
+
+          if (score === 11) {
+              d = pRandom() * 2.0; 
+          } else if (score === 10) {
+              d = 6.0 + pRandom() * 4.0; 
+          } else if (score === 8) {
+              const dMax = getEllipseR(25, 20);
+              const dMin = 14; 
+              d = dMin + pRandom() * Math.max(0, (dMax - 2 - dMin));
+          } else if (score === 5) {
+              const dMin = getEllipseR(25, 20); 
+              const dMax = getEllipseR(45, 35); 
+              d = (dMin + 3) + pRandom() * Math.max(0, (dMax - 3 - (dMin + 3)));
+          } else if (score === 0) {
+              const dMin = getEllipseR(45, 35);
+              d = (dMin + 6) + pRandom() * 8; 
+          }
+      } else {
+          if (score === 0) {
+              d = 53 + pRandom() * 10;
+          } else {
+              const rInner = (10 - score) * 5;
+              d = rInner + 1.5 + pRandom() * 2.0; 
+          }
+      }
+      
+      const dx = d * Math.cos(angle);
+      const dy = d * Math.sin(angle);
+      
+      return { x: 50 + dx, y: 50 + dy, score: score, isMock: true, directions: directions || [] };
+    };
+
+    // --- INTERAKTÍVNY TERČ S VEKTOROVOU GRAFIKOU (SVG) ---
+    const TargetFace = ({ hits = [], onHit, readOnly = false, is3D = false }) => {
+      const handleSvgClick = (e) => {
+        if (readOnly || !onHit) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+        const dx = x - 50;
+        const dy = y - 50;
+        const r = Math.sqrt(dx*dx + dy*dy);
+        const tolerance = 2.0; // Pravidlo čiary (line-cutter)
+
+        let score = 0;
+        if (is3D) {
+           if (dx*dx + dy*dy <= 4*4 + tolerance) score = 11;
+           else if (dx*dx + dy*dy <= 12*12 + tolerance) score = 10;
+           else if ((dx*dx)/(25*25) + (dy*dy)/(20*20) <= 1 + tolerance/10) score = 8;
+           else if ((dx*dx)/(45*45) + (dy*dy)/(35*35) <= 1 + tolerance/10) score = 5;
+           else score = 0;
+        } else {
+           if (r <= 5 + tolerance) score = 10;
+           else if (r <= 10 + tolerance) score = 9;
+           else if (r <= 15 + tolerance) score = 8;
+           else if (r <= 20 + tolerance) score = 7;
+           else if (r <= 25 + tolerance) score = 6;
+           else if (r <= 30 + tolerance) score = 5;
+           else if (r <= 35 + tolerance) score = 4;
+           else if (r <= 40 + tolerance) score = 3;
+           else if (r <= 45 + tolerance) score = 2;
+           else if (r <= 50 + tolerance) score = 1;
+           else score = 0; 
+        }
+
+        let calculatedDirections = [];
+        if (r > 2) { 
+           let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+           if (angle < 0) angle += 360;
+           
+           if (angle >= 337.5 || angle < 22.5) calculatedDirections = ['Vpravo'];
+           else if (angle >= 22.5 && angle < 67.5) calculatedDirections = ['Pod', 'Vpravo'];
+           else if (angle >= 67.5 && angle < 112.5) calculatedDirections = ['Pod'];
+           else if (angle >= 112.5 && angle < 157.5) calculatedDirections = ['Pod', 'Vľavo'];
+           else if (angle >= 157.5 && angle < 202.5) calculatedDirections = ['Vľavo'];
+           else if (angle >= 202.5 && angle < 247.5) calculatedDirections = ['Nad', 'Vľavo'];
+           else if (angle >= 247.5 && angle < 292.5) calculatedDirections = ['Nad'];
+           else if (angle >= 292.5 && angle < 337.5) calculatedDirections = ['Nad', 'Vpravo'];
+        }
+
+        onHit({ x, y, score, directions: calculatedDirections });
+      };
+
+      const classicRings = [
+        { r: 50, fill: '#ffffff', stroke: '#000000' }, 
+        { r: 45, fill: '#ffffff', stroke: '#000000' }, 
+        { r: 40, fill: '#222222', stroke: '#ffffff' }, 
+        { r: 35, fill: '#222222', stroke: '#ffffff' }, 
+        { r: 30, fill: '#06b6d4', stroke: '#000000' }, 
+        { r: 25, fill: '#06b6d4', stroke: '#000000' }, 
+        { r: 20, fill: '#ef4444', stroke: '#000000' }, 
+        { r: 15, fill: '#ef4444', stroke: '#000000' }, 
+        { r: 10, fill: '#eab308', stroke: '#000000' }, 
+        { r: 5,  fill: '#eab308', stroke: '#000000' }  
+      ];
+
+      return (
+        <div className="relative w-full max-w-[200px] mx-auto aspect-square">
+          <svg viewBox="0 0 100 100" onClick={handleSvgClick} className={`w-full h-full rounded-xl shadow-md bg-gray-200 border border-gray-300 ${readOnly ? '' : 'cursor-crosshair active:scale-95 transition-transform'}`}>
+            <rect x="0" y="0" width="100" height="100" fill="#e5e7eb" />
+            
+            {is3D ? (
+               <g>
+                  {/* Telo zvieraťa (5 zóna) */}
+                  <ellipse cx="50" cy="50" rx="45" ry="35" fill="#d4d4d8" stroke="#a1a1aa" strokeWidth="1" />
+                  {/* Komora (8 zóna) */}
+                  <ellipse cx="50" cy="50" rx="25" ry="20" fill="#a1a1aa" stroke="#71717a" strokeWidth="1" />
+                  {/* Srdce (10 zóna) */}
+                  <circle cx="50" cy="50" r="12" fill="#d4d4d8" stroke="#3f3f46" strokeWidth="1" />
+                  {/* Stred (11 zóna) */}
+                  <circle cx="50" cy="50" r="4" fill="#e4e4e7" stroke="#27272a" strokeWidth="1" />
+                  <circle cx="50" cy="50" r="0.5" fill="#000" />
+               </g>
+            ) : (
+               <g>
+                  {classicRings.map((ring, i) => (
+                     <circle key={i} cx="50" cy="50" r={ring.r} fill={ring.fill} stroke={ring.stroke} strokeWidth="0.3" />
+                  ))}
+                  <circle cx="50" cy="50" r="2.5" fill="none" stroke="#000000" strokeWidth="0.3" />
+                  <line x1="49" y1="50" x2="51" y2="50" stroke="#000" strokeWidth="0.4" />
+                  <line x1="50" y1="49" x2="50" y2="51" stroke="#000" strokeWidth="0.4" />
+               </g>
+            )}
+
+            {/* Vykreslenie zasahov vo farbách */}
+            {hits.filter(h => h).map((h, i) => {
+               const fillCol = getHitColorHex(h.score, is3D);
+               const strokeCol = (fillCol === '#ffffff' || fillCol === '#fcd34d' || fillCol === '#facc15' || fillCol === '#f59e0b') ? '#000000' : '#ffffff';
+               return (
+                  <circle key={i} cx={h.x} cy={h.y} r="2.5" fill={fillCol} stroke={strokeCol} strokeWidth="0.5" className="pointer-events-none drop-shadow-sm" />
+               );
+            })}
+          </svg>
+        </div>
+      );
+    };
+
+    function App() {
+      const [favorites, setFavorites] = useLocalStorage('luko_favorites', []);
+      const [history, setHistory] = useLocalStorage('luko_history', []);
+      const [archers, setArchers] = useState([]);
+      const [expandedStats, setExpandedStats] = useState({});
+      const [selectedShot, setSelectedShot] = useState(null); 
+      
+      const [roundConfig, setRoundConfig] = useState({ type: '3D', numTargets: 28, arrowsPerTarget: 2, startingTarget: 1 });
+      const [activeRound, setActiveRound] = useLocalStorage('luko_active_round', null);
+
+      // FOTOGRAFICKÁ PAMÄŤ: Ak existuje tréning, rovno ho otvor na kroku 3
+      const getInitialStep = () => {
+          try {
+              const item = window.localStorage.getItem('luko_active_round');
+              if (item && JSON.parse(item)) return 3;
+          } catch(e) {}
+          return 1;
+      };
+      const [step, setStep] = useState(getInitialStep);
+
+      const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null });
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+      // --- LOGIKA PRE ZISTENIE OFFLINE REŽIMU ---
+      const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+      useEffect(() => {
+        const handleOnline = () => setIsOffline(false);
+        const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+        };
+      }, []);
+
+      const [archerForm, setArcherForm] = useState({
+        name: '', gender: 'M', division: 'OL', age: 'senior'
+      });
+
+      // --- LOGIKA PRE PWA INŠTALÁCIU ---
+      useEffect(() => {
+        const handleBeforeInstallPrompt = (e) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+        };
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      }, []);
+
+      const handleInstallApp = async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+        }
+      };
+
+      const confirmAction = (message, action) => {
+        setConfirmDialog({ 
+          isOpen: true, 
+          message, 
+          onConfirm: () => { action(); setConfirmDialog({ isOpen: false, message: '', onConfirm: null }); }
+        });
+      };
+
+      const closeConfirm = () => {
+        setConfirmDialog({ isOpen: false, message: '', onConfirm: null });
+      };
+
+      const handleAddArcher = () => {
+        if (!archerForm.name.trim()) return;
+        const newArcher = {
+          id: Date.now().toString(),
+          name: archerForm.name.trim(),
+          gender: archerForm.gender,
+          division: archerForm.division,
+          age: archerForm.age
+        };
+        setArchers([...archers, newArcher]);
+        setArcherForm({ ...archerForm, name: '' });
+      };
+
+      const handleSaveToFavoritesOnly = () => {
+        if (!archerForm.name.trim()) return;
+        const newArcher = {
+          name: archerForm.name.trim(),
+          gender: archerForm.gender,
+          division: archerForm.division,
+          age: archerForm.age
+        };
+        const existingIdx = favorites.findIndex(f => f.name.toLowerCase() === newArcher.name.toLowerCase());
+        if (existingIdx >= 0) {
+           const updatedFavs = [...favorites];
+           updatedFavs[existingIdx] = newArcher;
+           setFavorites(updatedFavs);
+        } else {
+           setFavorites([...favorites, newArcher]);
+        }
+        setArcherForm({ ...archerForm, name: '' });
+      };
+
+      const handleAddFavorite = (favArcher) => {
+        if (!archers.find(a => a.name === favArcher.name)) {
+          setArchers([...archers, { ...favArcher, id: Date.now().toString() }]);
+        }
+      };
+
+      const removeArcher = (id) => setArchers(archers.filter(a => a.id !== id));
+      
+      const clearHistory = () => {
+        confirmAction("Naozaj vymazať celú históriu tréningov?", () => setHistory([]));
+      };
+
+      const deleteHistoryItem = (id) => {
+        confirmAction("Naozaj zmazať tento tréning z histórie?", () => {
+          setHistory(prev => prev.filter(h => h.id !== id));
+        });
+      };
+
+      const openHistoryRound = (historyEntry) => {
+        const loadRound = () => {
+          if (historyEntry.fullData) {
+            setActiveRound(historyEntry.fullData);
+            setSelectedShot(null);
+            setStep(4);
+          } else {
+            alert("Tento starší tréning neobsahuje detailné dáta na úpravu.");
+          }
+        };
+
+        if (activeRound) {
+          confirmAction("Existuje rozpísaný iný tréning. Otvorením tréningu z histórie sa aktuálny neuložený tréning prepíše. Pokračovať?", loadRound);
+        } else {
+          loadRound();
+        }
+      };
+
+      const startRound = () => {
+        const finalNumTargets = Number(roundConfig.numTargets) || 1;
+        let startIdx = Number(roundConfig.startingTarget) - 1;
+        if (startIdx < 0 || startIdx >= finalNumTargets) startIdx = 0;
+
+        const initialTargetData = Array.from({ length: finalNumTargets }).map(() => ({
+          name: '',
+          actualDist: '',
+          notes: '',
+          photo: null,
+          archers: archers.reduce((acc, archer) => {
+            acc[archer.id] = { shots: [], visualHits: [], estimatedDist: '' }; 
+            return acc;
+          }, {})
+        }));
+        
+        setActiveRound({
+          id: Date.now().toString(),
+          date: new Date().toLocaleDateString('sk-SK', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+          config: { ...roundConfig, numTargets: finalNumTargets },
+          archers: archers,
+          targetData: initialTargetData,
+          activeTargetIndex: startIdx,
+          activeArcherIndex: 0
+        });
+        
+        setSelectedShot(null);
+        setStep(3);
+      };
+
+      const resumeRound = () => {
+        if (activeRound) {
+           setSelectedShot(null);
+           setStep(3);
+        }
+      };
+
+      const updateActiveRound = (updater) => {
+        setActiveRound(prev => {
+          if (!prev) return null;
+          return updater({ ...prev });
+        });
+      };
+
+      const activeArcher = activeRound?.archers[activeRound.activeArcherIndex];
+      const activeTargetInfo = activeRound?.targetData[activeRound.activeTargetIndex] || null;
+      const activeArcherShots = activeTargetInfo && activeArcher ? activeTargetInfo.archers[activeArcher.id]?.shots || [] : [];
+      const activeArcherVisualHits = activeTargetInfo && activeArcher ? activeTargetInfo.archers[activeArcher.id]?.visualHits || [] : [];
+
+      const addShot = (score) => {
+        if (activeArcherShots.length >= activeRound.config.arrowsPerTarget) return;
+        updateActiveRound(draft => {
+          const archerId = draft.archers[draft.activeArcherIndex].id;
+          const data = draft.targetData[draft.activeTargetIndex].archers[archerId];
+          const is3D = draft.config.type === '3D';
+          if (!data.shots) data.shots = [];
+          if (!data.visualHits) data.visualHits = [];
+          
+          data.shots.push(score);
+          const mockHit = generateMockHit(score, [], is3D, Date.now() + data.shots.length);
+          mockHit.directions = []; 
+          data.visualHits.push(mockHit);
+          
+          setSelectedShot(data.shots.length - 1); 
+          return draft;
+        });
+      };
+
+      const addVisualHit = ({ x, y, score, directions }) => {
+        if (activeArcherShots.length >= activeRound.config.arrowsPerTarget) return;
+        updateActiveRound(draft => {
+          const archerId = draft.archers[draft.activeArcherIndex].id;
+          const data = draft.targetData[draft.activeTargetIndex].archers[archerId];
+          if (!data.shots) data.shots = [];
+          if (!data.visualHits) data.visualHits = [];
+
+          data.shots.push(score);
+          data.visualHits.push({ x, y, score, isMock: false, directions: directions || [] });
+          
+          setSelectedShot(data.shots.length - 1);
+          return draft;
+        });
+      };
+
+      const removeLastShot = () => {
+        if (activeArcherShots.length === 0) return;
+        updateActiveRound(draft => {
+          const archerId = draft.archers[draft.activeArcherIndex].id;
+          const data = draft.targetData[draft.activeTargetIndex].archers[archerId];
+          data.shots.pop();
+          if (data.visualHits) data.visualHits.pop();
+          
+          setSelectedShot(data.shots.length > 0 ? data.shots.length - 1 : null);
+          return draft;
+        });
+      };
+
+      const toggleDirection = (dir) => {
+        if (selectedShot === null) return;
+        updateActiveRound(draft => {
+          const archerId = draft.archers[draft.activeArcherIndex].id;
+          const data = draft.targetData[draft.activeTargetIndex].archers[archerId];
+          
+          const hit = data.visualHits[selectedShot];
+          if (!hit) return draft;
+          
+          if (!hit.directions) hit.directions = [];
+          if (hit.directions.includes(dir)) {
+            hit.directions = hit.directions.filter(d => d !== dir);
+          } else {
+            hit.directions.push(dir);
+          }
+          
+          if (hit.isMock) {
+              const newMock = generateMockHit(hit.score, hit.directions, draft.config.type === '3D', Date.now());
+              hit.x = newMock.x;
+              hit.y = newMock.y;
+          }
+          
+          return draft;
+        });
+      };
+
+      const updateTargetField = (field, value) => {
+        updateActiveRound(draft => {
+          draft.targetData[draft.activeTargetIndex][field] = value;
+          return draft;
+        });
+      };
+
+      const updateArcherTargetField = (field, value) => {
+        updateActiveRound(draft => {
+          const archerId = draft.archers[draft.activeArcherIndex].id;
+          draft.targetData[draft.activeTargetIndex].archers[archerId][field] = value;
+          return draft;
+        });
+      };
+
+      const handleNext = () => {
+        updateActiveRound(draft => {
+          if (draft.activeArcherIndex < draft.archers.length - 1) {
+            draft.activeArcherIndex++;
+          } else {
+            let nextTarget = draft.activeTargetIndex + 1;
+            if (nextTarget >= draft.config.numTargets) {
+              nextTarget = 0; 
+            }
+            draft.activeTargetIndex = nextTarget;
+            draft.activeArcherIndex = 0;
+          }
+          setSelectedShot(null);
+          return draft;
+        });
+      };
+
+      const handlePrev = () => {
+        updateActiveRound(draft => {
+          if (draft.activeArcherIndex > 0) {
+            draft.activeArcherIndex--;
+          } else {
+            let prevTarget = draft.activeTargetIndex - 1;
+            if (prevTarget < 0) {
+              prevTarget = draft.config.numTargets - 1; 
+            }
+            draft.activeTargetIndex = prevTarget;
+            draft.activeArcherIndex = draft.archers.length - 1;
+          }
+          setSelectedShot(null);
+          return draft;
+        });
+      };
+
+      const jumpToTarget = (e) => {
+        const idx = Number(e.target.value);
+        updateActiveRound(draft => {
+          draft.activeTargetIndex = idx;
+          draft.activeArcherIndex = 0;
+          setSelectedShot(null);
+          return draft;
+        });
+      };
+
+      const finishRound = () => {
+        setStep(4);
+      };
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > MAX_WIDTH) {
+              height = height * (MAX_WIDTH / width);
+              width = MAX_WIDTH;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            updateTargetField('photo', compressedBase64);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // --- COMPLEX STATISTICS CALCULATION ---
+      const getArcherStats = (archerId, dataSource = activeRound) => {
+        let total = 0, shotCount = 0, hits = {};
+        let allVisualHits = [];
+        
+        let dirStats = {}; 
+        let zeroDirStats = {}; 
+
+        let distStats = {
+            exact: 0, underCount: 0, underSum: 0, underMin: null, underMax: null,
+            overCount: 0, overSum: 0, overMin: null, overMax: null, totalCount: 0
+        };
+
+        if (!dataSource) return { total, shotCount, avg: '0.00', hits, visualHits: [], dirStats, zeroDirStats, distStats };
+
+        dataSource.targetData.forEach(tData => {
+          const aData = tData.archers[archerId];
+          if (!aData) return;
+
+          let legacyDirections = aData.directions || [];
+
+          if (aData.shots) {
+             aData.shots.forEach((s, idx) => {
+               total += s;
+               shotCount++;
+               hits[s] = (hits[s] || 0) + 1;
+               
+               let dirs = [];
+               if (aData.visualHits && aData.visualHits[idx] && aData.visualHits[idx].directions) {
+                   dirs = aData.visualHits[idx].directions;
+               } else if (idx === 0 && legacyDirections.length > 0) {
+                   dirs = legacyDirections;
+               }
+
+               if (dirs.length > 0) {
+                   const vert = ['Nad', 'Pod'].filter(d => dirs.includes(d));
+                   const horiz = ['Vľavo', 'Vpravo'].filter(d => dirs.includes(d));
+                   let validDirs = [...vert, ...horiz];
+                   
+                   if (validDirs.length > 0) {
+                       const key = validDirs.join(' a ');
+                       dirStats[key] = (dirStats[key] || 0) + 1;
+                       
+                       if (s === 0) {
+                           zeroDirStats[key] = (zeroDirStats[key] || 0) + 1;
+                       }
+                   }
+               }
+             });
+          }
+
+          if (aData.visualHits) {
+            aData.visualHits.forEach(vh => {
+              if (vh) allVisualHits.push(vh);
+            });
+          }
+
+          if (tData.actualDist !== '' && aData.estimatedDist !== '') {
+            const actual = Number(tData.actualDist);
+            const est = Number(aData.estimatedDist);
+            const diff = est - actual;
+            distStats.totalCount++;
+
+            if (diff === 0) {
+                distStats.exact++;
+            } else if (diff > 0) { 
+                distStats.overCount++;
+                distStats.overSum += diff;
+                distStats.overMin = distStats.overMin === null ? diff : Math.min(distStats.overMin, diff);
+                distStats.overMax = distStats.overMax === null ? diff : Math.max(distStats.overMax, diff);
+            } else { 
+                const absDiff = Math.abs(diff);
+                distStats.underCount++;
+                distStats.underSum += absDiff;
+                distStats.underMin = distStats.underMin === null ? absDiff : Math.min(distStats.underMin, absDiff);
+                distStats.underMax = distStats.underMax === null ? absDiff : Math.max(distStats.underMax, absDiff);
+            }
+          }
+        });
+
+        return { 
+          total, 
+          shotCount, 
+          avg: shotCount ? (total / shotCount).toFixed(2) : '0.00', 
+          hits, 
+          visualHits: allVisualHits,
+          dirStats,
+          zeroDirStats,
+          distStats
+        };
+      };
+
+      const saveToHistory = () => {
+        const statsResults = activeRound.archers.map(a => {
+           const stats = getArcherStats(a.id, activeRound);
+           return { name: a.name, division: a.division, total: stats.total };
+        }).sort((a,b) => b.total - a.total);
+
+        const newEntry = {
+          id: activeRound.id,
+          date: activeRound.date,
+          type: activeRound.config.type,
+          numTargets: activeRound.config.numTargets,
+          results: statsResults,
+          fullData: activeRound
+        };
+        
+        const existingIdx = history.findIndex(h => h.id === newEntry.id);
+        if (existingIdx >= 0) {
+          const newHistory = [...history];
+          newHistory[existingIdx] = newEntry;
+          setHistory(newHistory);
+        } else {
+          setHistory([newEntry, ...history]);
+        }
+        
+        setArchers([]);
+        setActiveRound(null);
+        setStep(1);
+      };
+
+      let content = null;
+
+      if (step === 1) {
+        content = (
+          <div className="max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col font-sans">
+            <div className="bg-cyan-600 text-white p-4 shadow-md flex items-center justify-between">
+              <h1 className="text-xl font-bold flex items-center gap-2">
+                <Target className="w-6 h-6" /> Score
+              </h1>
+              {isOffline && <span className="text-[10px] bg-red-500 px-2 py-1 rounded-full font-bold uppercase tracking-wider shadow-sm">Offline</span>}
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto">
+              
+              {/* Návod pre Apple aj Android */}
+              <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-4 mb-6 shadow-sm">
+                <h3 className="text-sm font-bold text-cyan-900 mb-1 flex items-center gap-1">
+                  <Download className="w-4 h-4"/> Inštalácia do mobilu (Offline)
+                </h3>
+                <p className="text-xs text-cyan-800 leading-tight mb-3">
+                  Pre bezproblémové fungovanie v lese bez internetu si pridajte túto aplikáciu priamo na plochu:
+                </p>
+                <div className="text-xs text-cyan-900 bg-white p-2 rounded border border-cyan-100 mb-2">
+                  <b>Android (Chrome):</b> Kliknite na 3 bodky vpravo hore v prehliadači a zvoľte "Pridať na plochu" (alebo "Inštalovať").
+                </div>
+                <div className="text-xs text-cyan-900 bg-white p-2 rounded border border-cyan-100">
+                  <b>iPhone (Safari):</b> Kliknite na ikonu Zdieľať (štvorec so šípkou hore) v spodnej lište a zvoľte "Pridať na plochu".
+                </div>
+              </div>
+              
+              {activeRound && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 shadow-sm">
+                  <h3 className="font-bold text-amber-800 flex items-center gap-2 mb-2">
+                    <Save className="w-5 h-5"/> Zistený uložený tréning
+                  </h3>
+                  <p className="text-sm text-amber-700 mb-3">
+                    K dispozícii je uložený tréning ({activeRound.archers.length} strelci, {activeRound.config.numTargets} terčov). Pokračovať v ňom?
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={resumeRound} className="flex-1 bg-amber-500 text-white font-bold py-2 rounded-lg shadow hover:bg-amber-600 flex justify-center items-center gap-2">
+                      <Play className="w-4 h-4"/> Pokračovať
+                    </button>
+                    <button onClick={() => confirmAction("Zmazať tento rozpísaný tréning?", () => setActiveRound(null))} className="px-3 bg-white text-red-500 font-bold border border-red-200 rounded-lg hover:bg-red-50">
+                      <Trash2 className="w-5 h-5"/>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+                <h2 className="text-lg font-semibold mb-4 text-gray-800 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-cyan-600" /> Pridať strelca
+                </h2>
+                
+                <div className="space-y-3">
+                  <input 
+                    type="text" 
+                    placeholder="Meno lukostrelca" 
+                    className="w-full p-3 border rounded-lg bg-gray-50 focus:ring-2 focus:ring-cyan-500 outline-none"
+                    value={archerForm.name}
+                    onChange={e => setArcherForm({...archerForm, name: e.target.value})}
+                  />
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <select 
+                      className="p-3 border rounded-lg bg-gray-50"
+                      value={archerForm.gender}
+                      onChange={e => setArcherForm({...archerForm, gender: e.target.value})}
+                    >
+                      <option value="M">Muž (M)</option>
+                      <option value="Z">Žena (Z)</option>
+                    </select>
+                    
+                    <select 
+                      className="p-3 border rounded-lg bg-gray-50"
+                      value={archerForm.division}
+                      onChange={e => setArcherForm({...archerForm, division: e.target.value})}
+                    >
+                      {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  
+                  <select 
+                    className="w-full p-3 border rounded-lg bg-gray-50"
+                    value={archerForm.age}
+                    onChange={e => setArcherForm({...archerForm, age: e.target.value})}
+                  >
+                    {AGE_CATEGORIES.map(a => <option key={a} value={a}>{a.charAt(0).toUpperCase() + a.slice(1)}</option>)}
+                  </select>
+
+                  <div className="flex gap-2 pt-2">
+                    <button 
+                      onClick={handleSaveToFavoritesOnly}
+                      className="flex-1 bg-white border-2 border-cyan-600 text-cyan-700 font-semibold p-2.5 rounded-lg hover:bg-cyan-50 transition text-sm flex items-center justify-center gap-1"
+                    >
+                      <Star className="w-4 h-4" /> Do obľúbených
+                    </button>
+                    <button 
+                      onClick={handleAddArcher}
+                      className="flex-1 bg-cyan-600 text-white font-semibold p-2.5 rounded-lg hover:bg-cyan-700 transition text-sm flex items-center justify-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" /> Dnes strieľa
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {favorites.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wider">Obľúbení strelci</h3>
+                  <div className="flex flex-col gap-2">
+                    {favorites.map(f => (
+                      <div key={f.name} className="flex items-stretch bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                        <button 
+                          onClick={() => handleAddFavorite(f)}
+                          className="px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 flex-1 text-left"
+                        >
+                          <Plus className="w-4 h-4 text-cyan-600 shrink-0" /> 
+                          <span className="flex-1 truncate">{f.name} <span className="text-xs text-gray-400 font-normal">({f.division})</span></span>
+                        </button>
+                        <button onClick={() => {
+                           setArcherForm({name: f.name, gender: f.gender, division: f.division, age: f.age});
+                           window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }} className="px-4 text-gray-400 hover:bg-gray-100 border-l border-gray-200 flex items-center justify-center">
+                           <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => {
+                           confirmAction(`Vymazať strelca ${f.name} z obľúbených?`, () => {
+                              setFavorites(favorites.filter(fav => fav.name !== f.name));
+                           });
+                        }} className="px-4 text-red-400 hover:bg-red-50 hover:text-red-600 border-l border-gray-200 flex items-center justify-center">
+                           <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-8">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Dnes strieľajú ({archers.length})
+                  </h3>
+                  {archers.length > 0 && (
+                    <button onClick={() => confirmAction("Vymazať všetkých strelcov z dnešného tréningu?", () => setArchers([]))} className="text-xs text-red-400 hover:text-red-600 font-medium px-2 py-1 bg-red-50 rounded-lg">Vymazať zoznam</button>
+                  )}
+                </div>
+                {archers.length === 0 ? (
+                  <p className="text-gray-400 text-sm italic bg-white p-4 rounded-lg border border-dashed">Zatiaľ nie je zapísaný žiadny strelec.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {archers.map((a, idx) => (
+                      <div key={a.id} className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-gray-800">{idx + 1}. {a.name}</div>
+                          <div className="text-xs text-gray-500">{a.gender} • {a.division} • {a.age}</div>
+                        </div>
+                        <button onClick={() => removeArcher(a.id)} className="text-red-400 hover:text-red-600 p-2">
+                          Zmazať
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {history.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex justify-between items-center mb-3">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1">
+                      <HistoryIcon className="w-4 h-4"/> História tréningov
+                    </h3>
+                    <button onClick={clearHistory} className="text-xs text-red-400 hover:text-red-600 font-medium px-2 py-1">Vymazať všetko</button>
+                  </div>
+                  <div className="space-y-3">
+                    {history.map((h, i) => (
+                      <div key={i} className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex justify-between items-start mb-2 border-b border-gray-50 pb-2">
+                          <span className="text-xs font-bold text-gray-400">{h.date}</span>
+                          <span className="text-xs font-semibold bg-gray-50 text-gray-600 px-2 py-0.5 rounded border border-gray-100">{h.type} • {h.numTargets} terčov</span>
+                        </div>
+                        <div className="space-y-1">
+                          {h.results.map((r, j) => (
+                            <div key={j} className="flex justify-between text-sm">
+                              <span className="text-gray-700">{j+1}. {r.name} <span className="text-[10px] text-gray-400">({r.division})</span></span>
+                              <span className={`font-bold ${j === 0 ? 'text-amber-500' : 'text-gray-600'}`}>{r.total} b</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 mt-3 pt-2 border-t border-gray-50">
+                          <button onClick={() => openHistoryRound(h)} className="flex-1 bg-cyan-50 text-cyan-700 text-xs font-bold py-2 rounded hover:bg-cyan-100 transition">
+                            Otvoriť a upraviť
+                          </button>
+                          <button onClick={() => deleteHistoryItem(h.id)} className="bg-red-50 text-red-500 text-xs font-bold py-2 px-3 rounded hover:bg-red-100 transition">
+                            Zmazať
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            <div className="p-4 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <button 
+                disabled={archers.length === 0}
+                onClick={() => {
+                  if (activeRound) {
+                    confirmAction("Existuje rozpísaný iný tréning. Začatím nového nastavenia sa starý zmaže. Pokračovať?", () => { setActiveRound(null); setStep(2); });
+                  } else {
+                    setStep(2);
+                  }
+                }}
+                className="w-full bg-cyan-600 disabled:bg-gray-300 text-white font-bold p-4 rounded-xl flex items-center justify-center gap-2 text-lg shadow-md transition-colors"
+              >
+                Nové nastavenie tréningu <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (step === 2) {
+        content = (
+          <div className="max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col font-sans">
+            <div className="bg-cyan-600 text-white p-4 shadow-md flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                  <button onClick={() => setStep(1)} className="p-1 hover:bg-cyan-700 rounded-lg">
+                    <ChevronLeft className="w-6 h-6" />
+                  </button>
+                  <h1 className="text-xl font-bold">Nastavenie tréningu</h1>
+              </div>
+              {isOffline && <span className="text-[10px] bg-red-500 px-2 py-1 rounded-full font-bold uppercase tracking-wider shadow-sm">Offline</span>}
+            </div>
+
+            <div className="p-5 flex-1 space-y-6">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Typ terča</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setRoundConfig({...roundConfig, type: '3D'})}
+                      className={`p-3 rounded-lg border-2 font-bold transition-all ${roundConfig.type === '3D' ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      3D Terč
+                    </button>
+                    <button 
+                      onClick={() => setRoundConfig({...roundConfig, type: 'Terč'})}
+                      className={`p-3 rounded-lg border-2 font-bold transition-all ${roundConfig.type === 'Terč' ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                    >
+                      Klasický Terč
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Počet terčov celkom</label>
+                  <input 
+                    type="number" min="1" max="100"
+                    value={roundConfig.numTargets}
+                    onChange={e => setRoundConfig({...roundConfig, numTargets: e.target.value === '' ? '' : Number(e.target.value)})}
+                    className="w-full p-3 border border-gray-300 rounded-lg text-lg text-center font-bold text-gray-800 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Začíname od terča č.</label>
+                  <input 
+                    type="number" min="1" max={roundConfig.numTargets || 1}
+                    value={roundConfig.startingTarget}
+                    onChange={e => setRoundConfig({...roundConfig, startingTarget: e.target.value === '' ? '' : Number(e.target.value)})}
+                    className="w-full p-3 border border-gray-300 rounded-lg text-lg text-center font-bold text-gray-800 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1 text-center">Ak nejdete od jednotky, tu si to nastavte.</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Počet šípov na terč</label>
+                  <div className="flex items-center gap-3">
+                    {[1, 2, 3, 6].map(num => (
+                      <button 
+                        key={num}
+                        onClick={() => setRoundConfig({...roundConfig, arrowsPerTarget: num})}
+                        className={`flex-1 p-2 rounded-lg border-2 font-bold transition-all ${roundConfig.arrowsPerTarget === num ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border-t border-gray-200">
+              <button 
+                onClick={startRound}
+                disabled={!roundConfig.numTargets}
+                className="w-full bg-cyan-600 disabled:bg-gray-300 text-white font-bold p-4 rounded-xl flex items-center justify-center gap-2 text-lg shadow-md"
+              >
+                <Check className="w-6 h-6" /> Začať tréning
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (step === 3 && activeRound) {
+        const is3D = activeRound.config.type === '3D';
+        const scoreButtons = is3D ? SCORES_3D : SCORES_TERC;
+        const currentStats = getArcherStats(activeArcher.id);
+        const isTargetCompleteForArcher = activeArcherShots.length >= activeRound.config.arrowsPerTarget;
+
+        content = (
+          <div className="max-w-md mx-auto h-screen bg-gray-100 flex flex-col font-sans">
+            
+            <div className="bg-cyan-700 text-white pt-4 pb-3 px-4 shadow-md flex flex-col items-center sticky top-0 z-20">
+              <div className="flex justify-between w-full items-center mb-1">
+                <button onClick={() => setStep(1)} className="text-cyan-200 hover:text-white flex items-center gap-1 text-xs font-bold transition-colors">
+                  <ChevronLeft className="w-4 h-4"/> Menu
+                </button>
+                <div className="flex items-center gap-2">
+                    {isOffline && <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded-full font-bold shadow-sm">OFFLINE</span>}
+                    <span className="text-cyan-200 text-sm font-semibold uppercase tracking-wider">{activeRound.config.type}</span>
+                </div>
+                <button onClick={finishRound} className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-1 px-3 rounded shadow-sm flex items-center gap-1 transition-colors">
+                  <Check className="w-3 h-3"/> Ukončiť
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xl font-medium text-cyan-200">Terč:</span>
+                <select 
+                  value={activeRound.activeTargetIndex} 
+                  onChange={jumpToTarget}
+                  className="bg-cyan-800 border border-cyan-600 text-white text-2xl font-black py-1 px-3 rounded-lg focus:outline-none appearance-none text-center cursor-pointer"
+                >
+                  {Array.from({ length: activeRound.config.numTargets }).map((_, i) => (
+                    <option key={i} value={i}>{i + 1}</option>
+                  ))}
+                </select>
+                <span className="text-xl font-medium text-cyan-200">/ {activeRound.config.numTargets}</span>
+              </div>
+            </div>
+
+            <div className="bg-white px-2 py-3 shadow-sm border-b border-gray-200 flex items-center justify-between z-10">
+              <button onClick={handlePrev} className="p-2 rounded-full text-cyan-600 hover:bg-cyan-50">
+                <ChevronLeft className="w-8 h-8" />
+              </button>
+              <div className="text-center flex-1">
+                <div className="text-sm text-gray-500 font-medium mb-0.5">Strelec {activeRound.activeArcherIndex + 1} z {activeRound.archers.length}</div>
+                <div className="text-xl font-bold text-gray-800 line-clamp-1">{activeArcher.name}</div>
+              </div>
+              <button onClick={handleNext} className="p-2 rounded-full text-cyan-600 hover:bg-cyan-50">
+                <ChevronRight className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              
+              <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex flex-col items-center">
+                <div className="text-sm text-gray-500 mb-3 font-medium uppercase tracking-wide">Hodnoty výstrelov</div>
+                <div className="flex gap-3 justify-center w-full px-2">
+                  {Array.from({ length: activeRound.config.arrowsPerTarget }).map((_, i) => {
+                    const shotVal = activeArcherShots[i];
+                    const hasShot = shotVal !== undefined;
+                    const isSelected = selectedShot === i;
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => { if(hasShot) setSelectedShot(i); }}
+                        className={`flex-1 max-w-[4rem] aspect-square flex items-center justify-center text-2xl font-black rounded-lg transition-all
+                          ${hasShot ? getScoreColor(shotVal, is3D) : 'bg-gray-100 text-gray-300 border-2 border-dashed border-gray-300'}
+                          ${isSelected ? 'ring-4 ring-cyan-500 scale-110 shadow-lg z-10' : (hasShot ? 'cursor-pointer hover:scale-105' : '')}
+                        `}
+                      >
+                        {hasShot ? shotVal : '-'}
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {activeArcherShots.length > 0 && (
+                  <button onClick={removeLastShot} className="mt-5 flex items-center gap-1 text-red-500 text-sm font-medium hover:bg-red-50 py-1 px-3 rounded-full transition">
+                    <RotateCcw className="w-4 h-4" /> Zmazať posledný šíp
+                  </button>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 flex flex-col items-center">
+                <h3 className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Zápis ťuknutím do terča</h3>
+                <TargetFace hits={activeArcherVisualHits} onHit={addVisualHit} readOnly={isTargetCompleteForArcher} is3D={is3D} />
+                <p className="text-[10px] text-gray-400 mt-3 text-center">Ťuknite na terč pre presný záznam. Smer odchýlky sa vypočíta automaticky.</p>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                <h3 className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide text-center">Alebo použite tlačidlá</h3>
+                <div className={`grid gap-2 ${is3D ? 'grid-cols-5' : 'grid-cols-4'}`}>
+                  {scoreButtons.map(score => (
+                    <button
+                      key={score}
+                      disabled={isTargetCompleteForArcher}
+                      onClick={() => addShot(score)}
+                      className={`h-14 rounded-lg text-xl font-bold transition-transform active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${getScoreColor(score, is3D)}`}
+                    >
+                      {score}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-cyan-50 rounded-xl p-4 border border-cyan-100 flex justify-between items-center shadow-sm">
+                <div className="text-center">
+                  <div className="text-xs text-cyan-700 font-semibold uppercase">Celkom</div>
+                  <div className="text-2xl font-black text-cyan-900">{currentStats.total}</div>
+                </div>
+                <div className="w-px h-10 bg-cyan-200"></div>
+                <div className="text-center">
+                  <div className="text-xs text-cyan-700 font-semibold uppercase">Priemer</div>
+                  <div className="text-2xl font-black text-cyan-900">{currentStats.avg}</div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100 space-y-4">
+                {is3D && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase">Odhad (m)</label>
+                        <input 
+                          type="number" 
+                          value={activeTargetInfo.archers[activeArcher.id].estimatedDist}
+                          onChange={(e) => updateArcherTargetField('estimatedDist', e.target.value)}
+                          placeholder="V metroch"
+                          className="w-full p-2 border border-cyan-200 rounded-lg bg-cyan-50 focus:bg-white outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase">Skutočná vzd. (m)</label>
+                        <input 
+                          type="number" 
+                          value={activeTargetInfo.actualDist || ''}
+                          onChange={(e) => updateTargetField('actualDist', e.target.value)}
+                          placeholder="Neskôr/Teraz"
+                          className="w-full p-2 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase">Názov terča (Zver)</label>
+                      <input 
+                        type="text" 
+                        value={activeTargetInfo.name}
+                        onChange={(e) => updateTargetField('name', e.target.value)}
+                        placeholder="napr. Jeleň"
+                        className="w-full p-2 border border-gray-200 rounded-lg bg-gray-50 focus:bg-white outline-none"
+                      />
+                    </div>
+                  </>
+                )}
+                
+                {/* Tlačidlá na rýchlu odchýlku viazané na konkrétny šíp */}
+                <div className={`pt-2 border-t border-gray-100 transition-opacity ${selectedShot !== null ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                      <label className="block text-[10px] font-semibold text-gray-500 uppercase">Kam šíp dopadol?</label>
+                      {selectedShot !== null && <span className="text-[10px] font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded">Šíp č. {selectedShot + 1}</span>}
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2">
+                     {DIRECTIONS.map(dir => {
+                        const activeHit = activeTargetInfo.archers[activeArcher.id].visualHits?.[selectedShot];
+                        const isActive = activeHit && activeHit.directions?.includes(dir);
+                        
+                        return (
+                           <button
+                             key={dir}
+                             onClick={() => toggleDirection(dir)}
+                             className={`px-3 py-1.5 rounded-lg text-sm font-semibold border transition-colors flex-1 ${isActive ? 'bg-cyan-100 border-cyan-400 text-cyan-800 shadow-inner' : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}
+                           >
+                             {dir === 'Nad' && '⬆️ '}
+                             {dir === 'Pod' && '⬇️ '}
+                             {dir === 'Vľavo' && '⬅️ '}
+                             {dir === 'Vpravo' && '➡️ '}
+                             {dir}
+                           </button>
+                        )
+                     })}
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2 text-center leading-tight">
+                    {selectedShot === null 
+                       ? "Najprv zadajte výstrel alebo ťuknite na bodové okienko vyššie pre výber šípu."
+                       : "Zvolený smer automaticky posunie bodku na terči."}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 mb-1 uppercase"><FileText className="w-3 h-3"/> Textová poznámka k terču</label>
+                  <textarea 
+                    rows="2"
+                    value={activeTargetInfo.notes}
+                    onChange={(e) => updateTargetField('notes', e.target.value)}
+                    placeholder="Zlý postoj, silný vietor..."
+                    className="w-full p-2 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                   <label className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 mb-2 uppercase"><ImageIcon className="w-3 h-3"/> Fotografia terča</label>
+                   {activeTargetInfo.photo ? (
+                     <div className="relative inline-block">
+                       <img src={activeTargetInfo.photo} alt="Terč" className="h-24 rounded-lg border border-gray-200 shadow-sm" />
+                       <button onClick={() => updateTargetField('photo', null)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow hover:bg-red-600">
+                         <Trash2 className="w-4 h-4"/>
+                       </button>
+                     </div>
+                   ) : (
+                     <label className="flex items-center justify-center gap-2 bg-gray-50 border-2 border-dashed border-gray-300 text-gray-500 rounded-lg p-3 cursor-pointer hover:bg-gray-100 transition">
+                       <Camera className="w-5 h-5" /> Odfotiť terč
+                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                     </label>
+                   )}
+                </div>
+              </div>
+              
+              <div className="h-24"></div>
+            </div>
+
+            <div className="bg-white p-4 border-t border-gray-200 shadow-[0_-4px_10px_rgba(0,0,0,0.05)] sticky bottom-0 z-20">
+              <button
+                onClick={handleNext}
+                className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all shadow-md ${
+                  isTargetCompleteForArcher 
+                    ? 'bg-cyan-600 text-white hover:bg-cyan-700 animate-pulse-once' 
+                    : 'bg-gray-100 text-gray-600 border border-gray-300'
+                }`}
+              >
+                 Ďalej <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      if (step === 4 && activeRound) {
+        const is3D = activeRound.config.type === '3D';
+        const scoreOptions = is3D ? SCORES_3D : SCORES_TERC;
+        
+        const allStats = activeRound.archers.map(a => ({ archer: a, stats: getArcherStats(a.id, activeRound) }));
+        allStats.sort((a, b) => b.stats.total - a.stats.total);
+
+        const updateActualDistance = (tIndex, value) => {
+          updateActiveRound(draft => {
+            draft.targetData[tIndex].actualDist = value;
+            return draft;
+          });
+        };
+
+        const toggleStats = (id) => {
+           setExpandedStats(prev => ({...prev, [id]: !prev[id]}));
+        };
+
+        content = (
+          <div className="max-w-md mx-auto min-h-screen bg-gray-50 flex flex-col font-sans">
+            <div className="bg-cyan-700 text-white p-4 shadow-md text-center sticky top-0 z-10 flex justify-between items-center">
+              <button onClick={() => setStep(3)} className="text-cyan-200 hover:text-white p-1"><ChevronLeft className="w-6 h-6"/></button>
+              <div className="text-center flex items-center gap-2">
+                <h1 className="text-xl font-bold flex items-center justify-center gap-2">
+                  <BarChart2 className="w-6 h-6" /> Výsledky
+                </h1>
+                {isOffline && <span className="text-[10px] bg-red-500 px-1.5 py-0.5 rounded-full font-bold shadow-sm">OFFLINE</span>}
+              </div>
+              <div className="w-6"></div>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-6">
+              
+              <div className="space-y-4">
+                {allStats.map(({ archer, stats }, index) => {
+                  const isExpanded = expandedStats[archer.id];
+                  
+                  return (
+                    <div key={archer.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden relative">
+                      <div className="p-4 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold text-sm shrink-0">
+                           {index + 1}.
+                        </div>
+                        <div>
+                          <div className="font-bold text-lg text-gray-800">{archer.name}</div>
+                          <div className="text-xs text-gray-500">{archer.division} • {archer.age}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="p-4 grid grid-cols-2 gap-4 text-center">
+                        <div>
+                          <div className="text-xs text-gray-500 uppercase font-semibold">Súčet bodov</div>
+                          <div className="text-3xl font-black text-cyan-600">{stats.total}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 uppercase font-semibold">Priemer na šíp</div>
+                          <div className="text-3xl font-black text-gray-700">{stats.avg}</div>
+                        </div>
+                      </div>
+
+                      <div className="px-4 pb-4">
+                        <div className="text-xs text-gray-500 uppercase font-semibold mb-2">Štatistika zásahov</div>
+                        <div className="flex flex-wrap gap-2">
+                          {scoreOptions.map(score => {
+                            const count = stats.hits[score] || 0;
+                            if (count === 0 && score < 8) return null;
+                            return (
+                              <div key={score} className="flex flex-col items-center bg-gray-50 rounded-md p-1 min-w-[3rem] border border-gray-100">
+                                <span className="text-[10px] font-bold text-gray-400">{score}</span>
+                                <span className="text-sm font-bold text-gray-800">{count}x</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {stats.visualHits.length > 0 && (
+                        <div className="px-4 pb-4 border-t border-gray-100 pt-4 bg-gray-50">
+                           <h4 className="text-[10px] font-bold text-gray-400 uppercase text-center mb-3">Vizuálny prehľad všetkých zásahov</h4>
+                           <TargetFace hits={stats.visualHits} readOnly={true} is3D={is3D} />
+                        </div>
+                      )}
+
+                      {/* Detailné štatistiky */}
+                      <div className="border-t border-gray-100">
+                        <button 
+                           onClick={() => toggleStats(archer.id)} 
+                           className="w-full py-3 px-4 bg-gray-50 text-cyan-700 text-sm font-bold flex items-center justify-between hover:bg-gray-100 transition-colors"
+                        >
+                           <span>Detailná analytika</span>
+                           {isExpanded ? <ChevronUp className="w-5 h-5"/> : <ChevronDown className="w-5 h-5"/>}
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="p-4 bg-white space-y-5 border-t border-gray-100">
+                            
+                            {/* Štatistika odchýlok */}
+                            <div>
+                               <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b border-gray-100 pb-1">Tendencia odchýlok (Kam to padá)</h4>
+                               {Object.keys(stats.dirStats).length === 0 ? (
+                                  <p className="text-xs text-gray-400 italic">Zatiaľ žiadne zaznamenané odchýlky.</p>
+                                ) : (
+                                  <div className="grid grid-cols-2 gap-2">
+                                     {Object.entries(stats.dirStats).sort((a,b) => b[1]-a[1]).map(([dir, count]) => (
+                                        <div key={dir} className="flex justify-between items-center bg-gray-50 px-3 py-2 rounded border border-gray-100">
+                                           <span className="text-sm text-gray-600">{dir}</span>
+                                           <span className="font-bold text-cyan-700">{count}x</span>
+                                        </div>
+                                     ))}
+                                  </div>
+                               )}
+                            </div>
+
+                            {/* Špeciálna štatistika pre minuté terče (0 bodov) */}
+                            {stats.hits[0] > 0 && Object.keys(stats.zeroDirStats).length > 0 && (
+                                <div className="mt-4 bg-red-50 p-3 rounded border border-red-100">
+                                    <h5 className="text-xs font-bold text-red-800 uppercase mb-2">Analýza minutých terčov (0 bodov)</h5>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {Object.entries(stats.zeroDirStats).sort((a,b) => b[1]-a[1]).map(([dir, count]) => (
+                                            <div key={dir} className="flex justify-between items-center bg-white px-2 py-1 rounded border border-red-100 text-sm">
+                                                <span className="text-gray-600">{dir}</span>
+                                                <span className="font-bold text-red-700">{count}x</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-red-600 mt-2 leading-tight">
+                                        Pomôcka: Ak sú tu odchýlky 'Nad' alebo 'Pod', môže ísť o nesprávny odhad vzdialenosti. Ak 'Vľavo' alebo 'Vpravo', ide skôr o technickú chybu.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Štatistika odhadov 3D */}
+                            {is3D && (
+                               <div className="pt-2">
+                                  <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 border-b border-gray-100 pb-1">Analýza odhadu vzdialeností</h4>
+                                  {stats.distStats.totalCount === 0 ? (
+                                     <p className="text-xs text-gray-400 italic">Pre túto štatistiku je potrebné zadať odhad aj skutočnú vzdialenosť.</p>
+                                  ) : (
+                                     <div className="space-y-3">
+                                        <div className="bg-emerald-50 border border-emerald-100 rounded p-3">
+                                           <div className="text-sm text-emerald-800 font-bold">Presný odhad: <span className="text-lg ml-1">{stats.distStats.exact}x</span></div>
+                                        </div>
+                                        
+                                        <div className="bg-amber-50 border border-amber-100 rounded p-3">
+                                           <div className="text-sm text-amber-800 font-bold mb-1">Podhodnotený odhad (menej): {stats.distStats.underCount}x</div>
+                                           {stats.distStats.underCount > 0 && (
+                                              <div className="text-xs text-amber-700">
+                                                 Priemerná chyba: <b>{(stats.distStats.underSum / stats.distStats.underCount).toFixed(1)} m</b><br/>
+                                                 <span className="opacity-75">(Rozpätie chýb: od {stats.distStats.underMin} m do {stats.distStats.underMax} m)</span>
+                                              </div>
+                                           )}
+                                        </div>
+
+                                        <div className="bg-red-50 border border-red-100 rounded p-3">
+                                           <div className="text-sm text-red-800 font-bold mb-1">Nadhodnotený odhad (viac): {stats.distStats.overCount}x</div>
+                                           {stats.distStats.overCount > 0 && (
+                                              <div className="text-xs text-red-700">
+                                                 Priemerná chyba: <b>{(stats.distStats.overSum / stats.distStats.overCount).toFixed(1)} m</b><br/>
+                                                 <span className="opacity-75">(Rozpätie chýb: od {stats.distStats.overMin} m do {stats.distStats.overMax} m)</span>
+                                              </div>
+                                           )}
+                                        </div>
+                                     </div>
+                                  )}
+                               </div>
+                            )}
+
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* DETAILNÝ PREHĽAD VŠETKÝCH TERČOV SO VŠETKÝM */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-3">
+                  <Target className="w-5 h-5 text-gray-500" /> Detailný prehľad terčov
+                </h3>
+                <p className="text-[10px] text-gray-400 mb-4">Zoznam všetkých terčov so zapísanými zásahmi a vzdialenosťami.</p>
+                
+                <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                  {activeRound.targetData.map((t, idx) => (
+                    <div key={idx} className="bg-gray-50 p-3 rounded-lg border border-gray-100 flex flex-col gap-3">
+                      <div className="flex items-center gap-3 justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-bold text-gray-600 shrink-0">
+                              {idx + 1}
+                            </div>
+                            <div>
+                              {is3D && t.name && <div className="text-sm font-semibold text-gray-700">{t.name}</div>}
+                              {!is3D && <div className="text-sm font-semibold text-gray-700">Terč {idx + 1}</div>}
+                            </div>
+                        </div>
+                        {is3D && (
+                            <input 
+                              type="number"
+                              placeholder="Skutočná vzd. (m)"
+                              value={t.actualDist}
+                              onChange={(e) => updateActualDistance(idx, e.target.value)}
+                              className="w-24 p-1.5 text-sm border border-gray-300 rounded text-center focus:ring-1 outline-none"
+                            />
+                        )}
+                      </div>
+
+                      {/* Výstrely a odchýlky jednotlivých strelcov na tomto terči */}
+                      <div className="space-y-3 pl-10 border-l-2 border-gray-200 ml-4">
+                         {activeRound.archers.map(archer => {
+                             const aData = t.archers[archer.id];
+                             if (!aData || !aData.visualHits?.length) return null;
+
+                             return (
+                                 <div key={archer.id} className="text-sm">
+                                    <div className="font-semibold text-gray-700 mb-1">{archer.name}</div>
+                                    
+                                    <div className="flex flex-col gap-1.5">
+                                       {/* Zobrazenie odhadu vzdialenosti */}
+                                       {is3D && aData.estimatedDist && (
+                                           <div className="text-xs text-gray-500 bg-white border border-gray-100 rounded px-2 py-1 inline-block w-max mb-1 shadow-sm">
+                                              Odhad: <b className="text-gray-700">{aData.estimatedDist} m</b>
+                                           </div>
+                                       )}
+
+                                       {/* Zoznam výstrelov pekne pod sebou */}
+                                       {aData.visualHits.map((vh, i) => {
+                                           if (!vh) return null;
+                                           return (
+                                              <div key={i} className="flex items-center gap-2">
+                                                  <div className={`w-6 h-6 flex items-center justify-center font-bold rounded ${getScoreColor(vh.score, is3D)} text-xs shadow-sm border border-black/10 shrink-0`}>
+                                                     {vh.score}
+                                                  </div>
+                                                  {vh.directions && vh.directions.length > 0 && (
+                                                      <span className="text-[10px] text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 font-medium">
+                                                         {vh.directions.join(' a ')}
+                                                      </span>
+                                                  )}
+                                                  {(!vh.directions || vh.directions.length === 0) && (
+                                                      <span className="text-[10px] text-gray-400 italic">Bez označenej odchýlky</span>
+                                                  )}
+                                              </div>
+                                           );
+                                       })}
+                                    </div>
+                                    
+                                    {/* Grafické zobrazenie tohto jedného terča a strelca */}
+                                    <div className="mt-2">
+                                        <div className="w-20">
+                                            <TargetFace hits={aData.visualHits} readOnly={true} is3D={is3D} />
+                                        </div>
+                                    </div>
+                                 </div>
+                             );
+                         })}
+                      </div>
+
+                      {/* Poznámky a fotky tohto terča */}
+                      {(t.notes || t.photo) && (
+                          <div className="pl-10 ml-4 mt-1 pt-2 border-t border-gray-200">
+                             {t.notes && <p className="text-xs text-gray-600 italic">"{t.notes}"</p>}
+                             {t.photo && <img src={t.photo} alt="Terč" className="mt-2 h-16 rounded shadow-sm border border-gray-300"/>}
+                          </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
+            <div className="p-4 bg-white border-t border-gray-200 flex flex-col gap-3">
+              <button 
+                onClick={saveToHistory}
+                className="w-full bg-cyan-600 text-white font-bold p-4 rounded-xl flex items-center justify-center gap-2 text-lg shadow-md hover:bg-cyan-700 transition-colors"
+              >
+                <Save className="w-5 h-5" /> Uložiť tréning do histórie
+              </button>
+              <button 
+                onClick={() => {
+                  confirmAction("Naozaj chcete zahodiť tento tréning? Údaje sa neuložia a navždy sa stratia.", () => {
+                    setActiveRound(null);
+                    setStep(1);
+                  });
+                }}
+                className="w-full bg-white text-red-500 font-bold p-4 rounded-xl flex items-center justify-center gap-2 text-lg border border-red-200 shadow-sm hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-5 h-5" /> Zahodiť bez uloženia
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <>
+          {content}
+          {confirmDialog.isOpen && (
+            <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl p-5 w-full max-w-sm shadow-2xl transform transition-all">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Upozornenie</h3>
+                <p className="text-gray-600 font-medium mb-6">{confirmDialog.message}</p>
+                <div className="flex gap-3">
+                  <button onClick={closeConfirm} className="flex-1 p-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200">Zrušiť</button>
+                  <button onClick={confirmDialog.onConfirm} className="flex-1 p-3 bg-red-500 text-white font-semibold rounded-lg hover:bg-red-600">Áno</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+    
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
