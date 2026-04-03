@@ -7,11 +7,14 @@
   
   <title>Score</title>
 
-  <!-- BEZPEČNÁ CESTA PRE GITHUB PAGES (Chráni pred Error 404) -->
+  <!-- BEZPEČNÁ CESTA PRE GITHUB PAGES -->
   <script>
     const svgIcon = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0891b2" /><circle cx="256" cy="256" r="180" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="120" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="60" fill="#ffffff" /><path d="M140 372 L256 256" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" /><path d="M110 402 L140 372 M120 360 L150 390 M100 380 L130 410" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" /></svg>`);
     
-    const basePath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+    // Automatická oprava cesty pre GitHub (ochrana pred chybou 404)
+    let basePath = window.location.pathname;
+    if (basePath.endsWith('index.html')) basePath = basePath.replace('index.html', '');
+    if (!basePath.endsWith('/')) basePath += '/';
 
     const manifest = {
       name: "Score (Strelecký denník)",
@@ -24,8 +27,10 @@
       icons: [{ src: svgIcon, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
     };
 
-    const manifestData = "data:application/manifest+json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest));
-    document.write('<link rel="manifest" href="' + manifestData + '">');
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+    const manifestUrl = URL.createObjectURL(manifestBlob);
+    
+    document.write('<link rel="manifest" href="' + manifestUrl + '">');
     document.write('<link rel="apple-touch-icon" href="' + svgIcon + '">');
   </script>
   
@@ -39,13 +44,17 @@
   <script src="https://unpkg.com/@babel/standalone@7.24.4/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
+  <!-- ATÓMOVÁ BOMBA NA PREČISTENIE STAREJ CACHE -->
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
       window.addEventListener('load', () => {
+        // Nasilu odregistrujeme všetky staré motorčeky
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) { registration.update(); }
+          for(let registration of registrations) { registration.unregister(); }
         });
-        navigator.serviceWorker.register('./sw.js?v=31', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
+        
+        // Zaregistrujeme nový motorček
+        navigator.serviceWorker.register('./sw.js?v=32', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
       });
     }
   </script>
@@ -130,6 +139,7 @@
     const Printer = ({ className }) => <Icon className={className}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></Icon>;
     const ImageFile = ({ className }) => <Icon className={className}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>;
     const X = ({ className }) => <Icon className={className}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+    const TrendingUp = ({ className }) => <Icon className={className}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></Icon>;
 
     // --- CONFIGURATION DATA ---
     const DIVISIONS = ['BB', 'CB', 'CRB', 'CU', 'HU', 'OL', 'PBHB', 'TRLB', 'TRRB'];
@@ -381,13 +391,15 @@
       const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null });
       const [deferredPrompt, setDeferredPrompt] = useState(null);
       
+      // Export a Zobrazenie States
       const [exportDialog, setExportDialog] = useState(false);
-      const [exportSettings, setExportSettings] = useState({ stats: true, targets: false });
+      const [exportSettings, setExportSettings] = useState({ stats: true, targets: false, archerId: 'all' });
       const [isExporting, setIsExporting] = useState(false);
-      
-      // Definovanie chýbajúcich premenných pre zobrazenie
       const [showTargetBreakdown, setShowTargetBreakdown] = useState(false);
       const [showGraphs, setShowGraphs] = useState(false);
+      
+      // Dlhodoba statisitka State
+      const [statsModal, setStatsModal] = useState({ isOpen: false, archerName: '', data: null });
 
       const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
@@ -435,6 +447,53 @@
       const closeConfirm = () => {
         setConfirmDialog({ isOpen: false, message: '', onConfirm: null });
       };
+
+      // --- DLHODOBA STATISTIKA ---
+      const openArcherStats = (archerName) => {
+        let totalArrows = 0;
+        let totalScore = 0;
+        let best3D = { score: 0, date: '-' };
+        let bestTerc = { score: 0, date: '-' };
+        let distDiffSum = 0;
+        let distDiffCount = 0;
+        let roundsCount = 0;
+
+        history.forEach(h => {
+          const result = h.results.find(r => r.name === archerName);
+          if (result) {
+            roundsCount++;
+            if (h.type === '3D' && result.total > best3D.score) best3D = { score: result.total, date: h.date };
+            if (h.type === 'Terč' && result.total > bestTerc.score) bestTerc = { score: result.total, date: h.date };
+            
+            if (h.fullData) {
+              const archerData = h.fullData.archers.find(a => a.name === archerName);
+              if (archerData) {
+                 h.fullData.targetData.forEach(t => {
+                    const aData = t.archers[archerData.id];
+                    if (aData && aData.shots) {
+                       totalArrows += aData.shots.length;
+                       aData.shots.forEach(s => totalScore += s);
+                    }
+                    if (h.type === '3D' && t.actualDist && aData && aData.estimatedDist) {
+                       distDiffSum += Math.abs(Number(t.actualDist) - Number(aData.estimatedDist));
+                       distDiffCount++;
+                    }
+                 });
+              }
+            }
+          }
+        });
+
+        const avg = totalArrows > 0 ? (totalScore / totalArrows).toFixed(2) : 0;
+        const avgDistError = distDiffCount > 0 ? (distDiffSum / distDiffCount).toFixed(1) : 0;
+
+        setStatsModal({ 
+          isOpen: true, 
+          archerName, 
+          data: { roundsCount, totalArrows, totalScore, avg, best3D, bestTerc, avgDistError } 
+        });
+      };
+
 
       const handleAddArcher = () => {
         if (!archerForm.name.trim()) return;
@@ -537,7 +596,6 @@
       const updateActiveRound = (updater) => {
         setActiveRound(prev => {
           if (!prev) return null;
-          // Vyrobíme kópiu, aby sme bezpečne menili dáta bez zacyklenia Reactu
           const draft = JSON.parse(JSON.stringify(prev));
           return updater(draft);
         });
@@ -682,6 +740,35 @@
       };
 
       const finishRound = () => setStep(4);
+
+      const handleImageUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 800;
+            let width = img.width;
+            let height = img.height;
+            if (width > MAX_WIDTH) {
+              height = height * (MAX_WIDTH / width);
+              width = MAX_WIDTH;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            updateTargetField('photo', compressedBase64);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
 
       // --- ZMENENÁ ŠTATISTIKA ---
       const getArcherStats = (archerId, dataSource = activeRound) => {
@@ -836,7 +923,12 @@
 
       const handleShareText = () => {
         setExportDialog(false);
-        const allStats = activeRound.archers.map(a => ({ archer: a, stats: getArcherStats(a.id, activeRound) })).sort((a, b) => b.stats.total - a.stats.total);
+        let exportArchers = activeRound.archers;
+        if (exportSettings.archerId !== 'all') {
+           exportArchers = activeRound.archers.filter(a => a.id === exportSettings.archerId);
+        }
+        
+        const allStats = exportArchers.map(a => ({ archer: a, stats: getArcherStats(a.id, activeRound) })).sort((a, b) => b.stats.total - a.stats.total);
         let text = `🎯 Výsledky tréningu (${activeRound.date})\nTyp: ${activeRound.config.type}, Terčov: ${activeRound.config.numTargets}\n\n`;
         allStats.forEach((r, idx) => {
            text += `${idx + 1}. ${r.archer.name} (${r.archer.division}) - ${r.stats.total} b. (Priemer: ${r.stats.avg})\n`;
@@ -963,6 +1055,9 @@
                           <Plus className="w-3 h-3 text-cyan-600 shrink-0" /> 
                           <span className="flex-1 truncate">{f.name} <span className="text-[10px] text-gray-400 font-normal">({f.division})</span></span>
                         </button>
+                        <button onClick={() => openArcherStats(f.name)} className="px-3 text-emerald-600 hover:bg-emerald-50 border-l border-gray-200 flex items-center justify-center">
+                           <TrendingUp className="w-4 h-4" />
+                        </button>
                         <button onClick={() => {
                            setArcherForm({name: f.name, gender: f.gender, division: f.division, age: f.age});
                            window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -994,12 +1089,15 @@
                 ) : (
                   <div className="space-y-1">
                     {archers.map((a, idx) => (
-                      <div key={a.id} className="bg-white p-2 rounded border border-gray-200 flex items-center justify-between text-sm shadow-sm">
-                        <div>
+                      <div key={a.id} className="bg-white p-2 rounded border border-gray-200 flex items-stretch text-sm shadow-sm overflow-hidden">
+                        <div className="flex-1 flex items-center px-2 py-1">
                           <span className="font-semibold text-gray-800">{idx + 1}. {a.name}</span>
                           <span className="text-[10px] text-gray-500 ml-2">{a.division}</span>
                         </div>
-                        <button onClick={() => removeArcher(a.id)} className="text-red-400 hover:text-red-600 p-1">
+                        <button onClick={() => openArcherStats(a.name)} className="px-3 text-emerald-600 hover:bg-emerald-50 border-l border-gray-200 flex items-center justify-center">
+                           <TrendingUp className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => removeArcher(a.id)} className="text-red-400 hover:bg-red-50 px-3 border-l border-gray-200 flex items-center justify-center">
                           <Trash2 className="w-3 h-3"/>
                         </button>
                       </div>
@@ -1060,6 +1158,54 @@
                 Pokračovať <ArrowRight className="w-5 h-5" />
               </button>
             </div>
+            
+            {/* Modal pre Dlhodobu Statistiku (Kariera) */}
+            {statsModal.isOpen && statsModal.data && (
+              <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl p-5 w-full max-w-sm shadow-2xl animate-slide-up">
+                  <div className="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                     <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-600"/> Kariéra strelca</h3>
+                     <button onClick={() => setStatsModal({isOpen: false, archerName:'', data:null})} className="text-gray-400 hover:bg-gray-100 p-1.5 rounded-full transition"><X className="w-5 h-5"/></button>
+                  </div>
+                  
+                  <div className="text-center mb-5">
+                     <div className="text-xl font-black text-gray-800">{statsModal.archerName}</div>
+                     <div className="text-xs text-gray-500">Zaznamenané z histórie: {statsModal.data.roundsCount} tréningov</div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                     <div className="bg-cyan-50 p-3 rounded-lg border border-cyan-100 text-center">
+                        <div className="text-[10px] uppercase font-bold text-cyan-700">Priemer na šíp</div>
+                        <div className="text-2xl font-black text-cyan-900">{statsModal.data.avg}</div>
+                     </div>
+                     <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-center">
+                        <div className="text-[10px] uppercase font-bold text-gray-500">Vystrelených šípov</div>
+                        <div className="text-2xl font-black text-gray-800">{statsModal.data.totalArrows}</div>
+                     </div>
+                  </div>
+
+                  <div className="bg-amber-50 p-3 rounded-lg border border-amber-100 mb-4">
+                     <h4 className="text-xs font-bold text-amber-800 mb-2 uppercase text-center border-b border-amber-200 pb-1">Osobné rekordy (Súčet)</h4>
+                     <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-semibold text-amber-900">3D Terč:</span>
+                        <span className="text-base font-black text-amber-600">{statsModal.data.best3D.score > 0 ? statsModal.data.best3D.score : '-'} <span className="text-[10px] text-amber-700 font-normal">({statsModal.data.best3D.date})</span></span>
+                     </div>
+                     <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold text-amber-900">Klasický:</span>
+                        <span className="text-base font-black text-amber-600">{statsModal.data.bestTerc.score > 0 ? statsModal.data.bestTerc.score : '-'} <span className="text-[10px] text-amber-700 font-normal">({statsModal.data.bestTerc.date})</span></span>
+                     </div>
+                  </div>
+                  
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                     <div className="flex justify-between items-center">
+                        <span className="text-xs text-blue-800 font-semibold">Dlhodobá chyba odhadu:</span>
+                        <span className="font-bold text-blue-900">{statsModal.data.avgDistError} m</span>
+                     </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -1283,6 +1429,20 @@
                   </div>
                 )}
                 
+                {/* Názov terča */}
+                {is3D && (
+                  <div>
+                    <label className="block text-[10px] font-semibold text-gray-500 mb-1 uppercase">Názov terča (Zver)</label>
+                    <input 
+                      type="text" 
+                      value={activeTargetInfo.name}
+                      onChange={(e) => updateTargetField('name', e.target.value)}
+                      placeholder="napr. Jeleň"
+                      className="w-full p-1.5 text-sm border border-gray-200 rounded bg-gray-50 focus:bg-white outline-none"
+                    />
+                  </div>
+                )}
+                
                 {/* Tlačidlá na rýchlu odchýlku */}
                 <div className={`pt-1 transition-opacity ${selectedShot !== null ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                   <div className="flex justify-between items-center mb-1">
@@ -1303,6 +1463,36 @@
                         )
                      })}
                   </div>
+                </div>
+
+                {/* Textová poznámka */}
+                <div>
+                  <label className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 mb-1 uppercase"><FileText className="w-3 h-3"/> Textová poznámka</label>
+                  <textarea 
+                    rows="2"
+                    value={activeTargetInfo.notes}
+                    onChange={(e) => updateTargetField('notes', e.target.value)}
+                    placeholder="Zlý postoj, vietor..."
+                    className="w-full p-1.5 text-sm border border-gray-200 rounded bg-gray-50 focus:bg-white outline-none resize-none"
+                  />
+                </div>
+
+                {/* Fotografia terča */}
+                <div>
+                   <label className="flex items-center gap-1 text-[10px] font-semibold text-gray-500 mb-1 uppercase"><ImageIcon className="w-3 h-3"/> Fotografia terča</label>
+                   {activeTargetInfo.photo ? (
+                     <div className="relative inline-block">
+                       <img src={activeTargetInfo.photo} alt="Terč" className="h-20 rounded border border-gray-200 shadow-sm" />
+                       <button onClick={() => updateTargetField('photo', null)} className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full shadow hover:bg-red-600">
+                         <Trash2 className="w-3 h-3"/>
+                       </button>
+                     </div>
+                   ) : (
+                     <label className="flex items-center justify-center gap-2 bg-gray-50 border border-dashed border-gray-300 text-gray-500 rounded p-2 cursor-pointer hover:bg-gray-100 transition text-xs">
+                       <Camera className="w-4 h-4" /> Odfotiť
+                       <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                     </label>
+                   )}
                 </div>
               </div>
               <div className="h-6"></div>
@@ -1367,6 +1557,9 @@
                 {allStats.map(({ archer, stats }, index) => {
                   
                   const shouldShowStats = isExporting ? exportSettings.stats : expandedStats[archer.id];
+                  
+                  // Filter pre individuálny export
+                  if (isExporting && exportSettings.archerId !== 'all' && exportSettings.archerId !== archer.id) return null;
                   
                   let totalDir = { Nad: 0, Pod: 0, 'Vľavo': 0, 'Vpravo': 0 };
                   Object.values(stats.scoreDirStats).forEach(dirObj => {
@@ -1565,6 +1758,9 @@
                       <div className="space-y-3">
                          {activeRound.archers.map(archer => {
                              const aData = t.archers[archer.id];
+                             // Preskočiť strelca, ak robíme individuálny export a toto nie je on
+                             if (isExporting && exportSettings.archerId !== 'all' && exportSettings.archerId !== archer.id) return null;
+                             
                              if (!aData || !aData.visualHits?.length) return null;
 
                              return (
@@ -1602,6 +1798,7 @@
                       </div>
                       
                       {t.notes && <div className="mt-2 text-xs text-gray-500 italic bg-gray-50 p-2 rounded border border-gray-100">Poznámka: {t.notes}</div>}
+                      {t.photo && <img src={t.photo} alt="Terč" className="mt-2 h-20 rounded shadow-sm border border-gray-200 print-break-inside"/>}
                     </div>
                   ))}
                 </div>
@@ -1614,6 +1811,12 @@
                 className="w-full bg-cyan-600 text-white font-bold p-3 rounded-lg flex items-center justify-center gap-2 text-sm shadow hover:bg-cyan-700"
               >
                 <Save className="w-4 h-4" /> Uložiť do histórie
+              </button>
+              <button 
+                onClick={() => confirmAction("Naozaj zahodiť tento tréning?", () => { setActiveRound(null); setStep(1); })}
+                className="w-full bg-white text-red-500 font-bold p-2.5 rounded-lg flex items-center justify-center gap-1 text-xs border border-red-200 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 className="w-3 h-3" /> Zahodiť tréning
               </button>
             </div>
             
@@ -1634,6 +1837,17 @@
                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-3 px-1">Nastavenie grafického reportu</p>
                      
                      <div className="space-y-2 mb-5">
+                        <select 
+                          className="w-full p-3 bg-white rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-cyan-500 shadow-sm"
+                          value={exportSettings.archerId}
+                          onChange={(e) => setExportSettings({...exportSettings, archerId: e.target.value})}
+                        >
+                          <option value="all">Všetci strelci spoločne</option>
+                          {allStats.map(({archer}) => (
+                            <option key={archer.id} value={archer.id}>Len strelec: {archer.name}</option>
+                          ))}
+                        </select>
+                     
                         <label className="flex items-center gap-3 p-3 bg-white rounded-xl cursor-pointer border border-gray-200 shadow-sm hover:border-cyan-300 transition">
                            <input type="checkbox" checked={exportSettings.stats} onChange={e => setExportSettings({...exportSettings, stats: e.target.checked})} className="w-5 h-5 text-cyan-600 rounded border-gray-300 focus:ring-cyan-500" />
                            <span className="text-sm font-semibold text-gray-700">Zahrnúť štatistiku zásahov</span>
