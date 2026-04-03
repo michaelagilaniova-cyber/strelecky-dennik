@@ -7,23 +7,25 @@
   
   <title>Score</title>
 
+  <!-- BEZPEČNÁ CESTA PRE GITHUB PAGES (Chráni pred Error 404) -->
   <script>
     const svgIcon = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#0891b2" /><circle cx="256" cy="256" r="180" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="120" fill="none" stroke="#ffffff" stroke-width="16" /><circle cx="256" cy="256" r="60" fill="#ffffff" /><path d="M140 372 L256 256" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" /><path d="M110 402 L140 372 M120 360 L150 390 M100 380 L130 410" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round" /></svg>`);
     
+    const basePath = window.location.pathname.endsWith('/') ? window.location.pathname : window.location.pathname + '/';
+
     const manifest = {
       name: "Score (Strelecký denník)",
       short_name: "Score",
       display: "standalone",
-      start_url: "./",
+      start_url: basePath,
+      scope: basePath,
       background_color: "#f9fafb",
       theme_color: "#0891b2",
       icons: [{ src: svgIcon, sizes: "512x512", type: "image/svg+xml", purpose: "any maskable" }]
     };
 
-    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
-    const manifestUrl = URL.createObjectURL(manifestBlob);
-    
-    document.write('<link rel="manifest" href="' + manifestUrl + '">');
+    const manifestData = "data:application/manifest+json;charset=utf-8," + encodeURIComponent(JSON.stringify(manifest));
+    document.write('<link rel="manifest" href="' + manifestData + '">');
     document.write('<link rel="apple-touch-icon" href="' + svgIcon + '">');
   </script>
   
@@ -40,9 +42,10 @@
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=28').then(registration => {
-          registration.update();
-        }).catch((error) => console.log('SW chyba:', error));
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) { registration.update(); }
+        });
+        navigator.serviceWorker.register('./sw.js?v=31', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
       });
     }
   </script>
@@ -83,7 +86,7 @@
 <body class="bg-gray-50 antialiased text-gray-800">
   
   <div id="root">
-    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background-color:#f9fafb; font-family:sans-serif;">
+    <div id="loading-screen" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background-color:#f9fafb; font-family:sans-serif;">
       <svg viewBox="0 0 512 512" width="60" height="60" style="animation: pulse-icon 1.5s ease-in-out infinite;">
         <rect width="512" height="512" rx="112" fill="#0891b2" />
         <circle cx="256" cy="256" r="180" fill="none" stroke="#ffffff" stroke-width="16" />
@@ -92,7 +95,7 @@
         <path d="M140 372 L256 256" fill="none" stroke="#ffffff" stroke-width="24" stroke-linecap="round" />
       </svg>
       <h2 style="color:#0891b2; margin-top:15px; font-weight:bold; font-size:18px;">Score</h2>
-      <p style="color:#6b7280; font-size:12px; margin-top:10px; text-align:center;">Načítavam tréning...</p>
+      <p style="color:#6b7280; font-size:12px; margin-top:10px; text-align:center;">Pripravujem aplikáciu...</p>
     </div>
   </div>
 
@@ -381,6 +384,8 @@
       const [exportDialog, setExportDialog] = useState(false);
       const [exportSettings, setExportSettings] = useState({ stats: true, targets: false });
       const [isExporting, setIsExporting] = useState(false);
+      
+      // Definovanie chýbajúcich premenných pre zobrazenie
       const [showTargetBreakdown, setShowTargetBreakdown] = useState(false);
       const [showGraphs, setShowGraphs] = useState(false);
 
@@ -528,10 +533,11 @@
         }
       };
 
-      // BEZPEČNÁ AKTUALIZÁCIA STAVU (Deep Clone)
+      // ZABEZPECENIE PROTI PREPISOVANIU PAMÄTE (Deep Clone)
       const updateActiveRound = (updater) => {
         setActiveRound(prev => {
           if (!prev) return null;
+          // Vyrobíme kópiu, aby sme bezpečne menili dáta bez zacyklenia Reactu
           const draft = JSON.parse(JSON.stringify(prev));
           return updater(draft);
         });
@@ -643,9 +649,9 @@
             draft.activeTargetIndex = nextTarget;
             draft.activeArcherIndex = 0;
           }
-          setSelectedShot(null);
           return draft;
         });
+        setSelectedShot(null);
       };
 
       const handlePrev = () => {
@@ -660,9 +666,9 @@
             draft.activeTargetIndex = prevTarget;
             draft.activeArcherIndex = draft.archers.length - 1;
           }
-          setSelectedShot(null);
           return draft;
         });
+        setSelectedShot(null);
       };
 
       const jumpToTarget = (e) => {
@@ -670,41 +676,12 @@
         updateActiveRound(draft => {
           draft.activeTargetIndex = idx;
           draft.activeArcherIndex = 0;
-          setSelectedShot(null);
           return draft;
         });
+        setSelectedShot(null);
       };
 
       const finishRound = () => setStep(4);
-
-      const handleImageUpload = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 800;
-            let width = img.width;
-            let height = img.height;
-            if (width > MAX_WIDTH) {
-              height = height * (MAX_WIDTH / width);
-              width = MAX_WIDTH;
-            }
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-            updateTargetField('photo', compressedBase64);
-          };
-          img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
-      };
 
       // --- ZMENENÁ ŠTATISTIKA ---
       const getArcherStats = (archerId, dataSource = activeRound) => {
@@ -832,6 +809,7 @@
         setIsExporting(true);
         setExportDialog(false);
         
+        // Pockame aby sa React DOM stihol prekreslit s rozbalenými detailami
         await new Promise(r => setTimeout(r, 600));
         
         try {
@@ -1390,7 +1368,6 @@
                   
                   const shouldShowStats = isExporting ? exportSettings.stats : expandedStats[archer.id];
                   
-                  // Zrátanie smerov pre graf (Nad, Pod, Vlavo, Vpravo dokopy za strelca)
                   let totalDir = { Nad: 0, Pod: 0, 'Vľavo': 0, 'Vpravo': 0 };
                   Object.values(stats.scoreDirStats).forEach(dirObj => {
                      Object.entries(dirObj).forEach(([k, v]) => {
@@ -1701,6 +1678,9 @@
         </>
       );
     }
+    
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) loadingScreen.remove();
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
