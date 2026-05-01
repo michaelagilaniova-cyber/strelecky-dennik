@@ -44,14 +44,14 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
-  <!-- BEZPEČNÁ REGISTRÁCIA MOTORČEKA -->
+  <!-- BEZPEČNÁ REGISTRÁCIA MOTORČEKA v32 -->
   <script>
     if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
           for(let registration of registrations) { registration.update(); }
         });
-        navigator.serviceWorker.register('./sw.js?v=31', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
+        navigator.serviceWorker.register('./sw.js?v=32', { scope: basePath }).catch((error) => console.log('SW chyba:', error));
       });
     }
   </script>
@@ -331,7 +331,7 @@
       ];
 
       return (
-        <div className={`relative w-full mx-auto aspect-square ${readOnly ? 'max-w-[220px]' : 'max-w-[340px]'}`}>
+        <div className={`relative w-full mx-auto aspect-square ${readOnly ? 'max-w-[220px]' : 'max-w-full sm:max-w-[400px]'}`}>
           <svg viewBox="0 0 100 100" onClick={handleSvgClick} className={`w-full h-full rounded shadow bg-gray-100 border border-gray-200 ${readOnly ? '' : 'cursor-crosshair active:scale-95 transition-transform'}`}>
             <rect x="0" y="0" width="100" height="100" fill="#f3f4f6" />
             
@@ -1429,7 +1429,7 @@
                 )}
               </div>
 
-              <div className="bg-white rounded-lg shadow-sm p-3 border border-gray-100 flex flex-col items-center">
+              <div className="bg-white rounded-lg shadow-sm pt-2 pb-3 px-1 border border-gray-100 flex flex-col items-center w-full">
                 <TargetFace hits={activeArcherVisualHits} onHit={addVisualHit} readOnly={isTargetCompleteForArcher} is3D={is3D} />
                 <p className="text-[10px] text-gray-400 mt-2 text-center">Ťuknutím do terča zapíšte bod.</p>
               </div>
