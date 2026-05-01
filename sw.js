@@ -1,4 +1,4 @@
-const CACHE_NAME = 'score-offline-v31';
+const CACHE_NAME = 'score-offline-v32';
 const urlsToCache = [
   './',
   './index.html',
