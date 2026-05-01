@@ -1,4 +1,4 @@
-const CACHE_NAME = 'score-offline-v30';
+const CACHE_NAME = 'score-offline-v31';
 const urlsToCache = [
   './',
   './index.html',
@@ -6,11 +6,19 @@ const urlsToCache = [
   'https://unpkg.com/react@18.3.1/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js',
   'https://unpkg.com/@babel/standalone@7.24.4/babel.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
 ];
 
 self.addEventListener('install', event => {
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return Promise.allSettled(
+        urlsToCache.map(url => cache.add(url).catch(err => console.log('Chyba ukladania:', url)))
+      );
+    })
+  );
 });
 
 self.addEventListener('activate', event => {
@@ -22,17 +30,14 @@ self.addEventListener('activate', event => {
   );
 });
 
-// ZACHRANNÁ STRATÉGIA: Najprv sieť (aby si vždy videla novú verziu), potom cache (do lesa)
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  
   event.respondWith(
     fetch(event.request).then(response => {
       const resClone = response.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
       return response;
     }).catch(() => {
-      // Sme offline - vraciame z pamäte
       return caches.match(event.request).then(cached => {
         if (cached) return cached;
         if (event.request.mode === 'navigate') return caches.match('./index.html');
